@@ -68,11 +68,18 @@ wait_for_mongodb () {
 
     if [[ $TIMER -eq 20 ]]; then
       echo "MongoDB did not initialize within 20 seconds. Exiting."
+      docker logs $MONGODB_CONTAINER_NAME
       exit 2
     fi
   done
   echo "::endgroup::"
 }
+
+
+# The official mongo:8.x images set GLIBC_TUNABLES=glibc.pthread.rseq=0, which
+# enables TCMalloc per-CPU caches; mongod 8.x then refuses to start on Linux
+# kernel 6.19+ (SERVER-121912). Clearing it falls back to per-thread caches.
+GLIBC_TUNABLES_ARGS="-e GLIBC_TUNABLES="
 
 
 # check if the container already exists and remove it
@@ -92,7 +99,7 @@ if [ -z "$MONGODB_REPLICA_SET" ]; then
   echo "  - container-name [$MONGODB_CONTAINER_NAME]"
   echo ""
 
-  docker run --name $MONGODB_CONTAINER_NAME --publish $MONGODB_PORT:$MONGODB_PORT -e MONGO_INITDB_DATABASE=$MONGODB_DB -e MONGO_INITDB_ROOT_USERNAME=$MONGODB_USERNAME -e MONGO_INITDB_ROOT_PASSWORD=$MONGODB_PASSWORD --detach $MONGODB_IMAGE:$MONGODB_VERSION --port $MONGODB_PORT
+  docker run --name $MONGODB_CONTAINER_NAME --publish $MONGODB_PORT:$MONGODB_PORT $GLIBC_TUNABLES_ARGS -e MONGO_INITDB_DATABASE=$MONGODB_DB -e MONGO_INITDB_ROOT_USERNAME=$MONGODB_USERNAME -e MONGO_INITDB_ROOT_PASSWORD=$MONGODB_PASSWORD --detach $MONGODB_IMAGE:$MONGODB_VERSION --port $MONGODB_PORT
 
   if [ $? -ne 0 ]; then
       echo "Error starting MongoDB Docker container"
@@ -113,7 +120,7 @@ echo "  - replica set [$MONGODB_REPLICA_SET]"
 echo ""
 
 
-docker run --name $MONGODB_CONTAINER_NAME --publish $MONGODB_PORT:$MONGODB_PORT --detach $MONGODB_IMAGE:$MONGODB_VERSION --port $MONGODB_PORT --replSet $MONGODB_REPLICA_SET
+docker run --name $MONGODB_CONTAINER_NAME --publish $MONGODB_PORT:$MONGODB_PORT $GLIBC_TUNABLES_ARGS --detach $MONGODB_IMAGE:$MONGODB_VERSION --port $MONGODB_PORT --replSet $MONGODB_REPLICA_SET
 
 if [ $? -ne 0 ]; then
     echo "Error starting MongoDB Docker container"
